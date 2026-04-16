@@ -1,0 +1,585 @@
+# Smart Attendance System — Complete Setup Documentation
+
+> **Project:** Smart Attendance System (Face Recognition)  
+> **Stack:** Python 3.10 · Flask · OpenCV · face_recognition · MySQL (XAMPP)  
+> **Date:** 2026-04-16  
+> **Environment:** Windows 11, XAMPP (MySQL), Python 3.10.3  
+
+---
+
+## Table of Contents
+
+1. [Prerequisites](#1-prerequisites)
+2. [Project Structure](#2-project-structure)
+3. [Step-by-Step Setup Commands](#3-step-by-step-setup-commands)
+   - [3.1 Verify Python & pip](#31-verify-python--pip)
+   - [3.2 Check Virtual Environment](#32-check-virtual-environment)
+   - [3.3 Identify Disk Space Issue](#33-identify-disk-space-issue)
+   - [3.4 Install Core Dependencies](#34-install-core-dependencies)
+   - [3.5 Install dlib (The Tricky One)](#35-install-dlib-the-tricky-one)
+   - [3.6 Install face_recognition](#36-install-face_recognition)
+   - [3.7 Set Up the MySQL Database](#37-set-up-the-mysql-database)
+   - [3.8 Fix the Admin Password Hash](#38-fix-the-admin-password-hash)
+   - [3.9 Start the Flask Server](#39-start-the-flask-server)
+4. [Errors Encountered & How They Were Fixed](#4-errors-encountered--how-they-were-fixed)
+5. [Accessing the Application](#5-accessing-the-application)
+6. [Default Credentials](#6-default-credentials)
+7. [Quick Re-setup Checklist](#7-quick-re-setup-checklist)
+8. [Restarting the Server Later](#8-restarting-the-server-later)
+
+---
+
+## 1. Prerequisites
+
+Before running any commands, make sure the following are installed on the machine:
+
+| Tool | Version Used | How to Get It |
+|------|-------------|---------------|
+| **Python** | 3.10.3 (64-bit) | https://www.python.org/downloads/ |
+| **XAMPP** | Any recent version | https://www.apachefriends.org/ |
+| **MySQL** (via XAMPP) | MariaDB 10.x | Included with XAMPP |
+| **Git** | Any | https://git-scm.com/ (optional) |
+
+> [!IMPORTANT]
+> Python **must be 64-bit** (win_amd64). The prebuilt `dlib` wheel only works with 64-bit Python.
+> XAMPP's MySQL service must be **started** before running the app.
+
+---
+
+## 2. Project Structure
+
+```
+smart_attendance/
+├── app.py                     ← Main Flask application (entry point)
+├── config.py                  ← Database credentials, file paths, config
+├── requirements.txt           ← Python dependencies list
+├── venv/                      ← Python virtual environment
+├── database/
+│   └── schema.sql             ← MySQL schema (run this ONCE to create tables)
+├── models/
+│   └── db.py                  ← Database helper (execute_query function)
+├── attendance/
+│   └── attendance.py          ← Attendance logic (mark, get, summarise)
+├── face_recognition_module/
+│   ├── capture_faces.py       ← Webcam face capture
+│   ├── encode_faces.py        ← HOG face encoding
+│   └── recognize_faces.py     ← Live recognition loop
+├── dataset/
+│   └── faces/                 ← Auto-created; stores student photo sets
+├── static/
+│   ├── css/style.css
+│   └── js/                    ← dashboard.js, main.js, register.js, etc.
+└── templates/                 ← Jinja2 HTML templates
+```
+
+---
+
+## 3. Step-by-Step Setup Commands
+
+> All commands are run from **PowerShell** inside the project directory:
+> `c:\xampp\htdocs\smart_attendance\`
+
+---
+
+### 3.1 Verify Python & pip
+
+```powershell
+python --version
+pip --version
+```
+
+**Expected output:**
+```
+Python 3.10.3
+pip 22.0.4 from C:\Program Files\Python310\lib\site-packages\pip (python 3.10)
+```
+
+---
+
+### 3.2 Check Virtual Environment
+
+The project already contained a `venv/` folder. Verify it exists and what is installed:
+
+```powershell
+.\venv\Scripts\python.exe --version
+.\venv\Scripts\pip.exe list
+```
+
+**Output found (bare venv — only these were present):**
+```
+Package    Version
+---------- -------
+pip        26.0.1
+setuptools 58.1.0
+```
+
+> [!NOTE]
+> If you don't have a `venv/` folder yet, create one first:
+> ```powershell
+> python -m venv venv
+> ```
+
+---
+
+### 3.3 Identify Disk Space Issue
+
+Before installing, we checked available disk space because the first install attempt failed:
+
+```powershell
+Get-PSDrive C | Select-Object Used, Free
+Get-PSDrive D | Select-Object Used, Free
+```
+
+**Output:**
+```
+C: — Used: 127 GB   Free: ~62 MB   ← CRITICALLY LOW
+D: — Used: 7 GB     Free: ~115 GB  ← Plenty of space
+```
+
+> [!CAUTION]
+> **C: drive had only ~62 MB free.** pip's temp and cache directories defaulted to `%TEMP%` on C:, causing the first install to fail with:
+> `ERROR: Could not install packages due to an OSError: [Errno 28] No space left on device`
+>
+> The fix: redirect pip's cache and temp directories to D: drive for all subsequent installs.
+
+---
+
+### 3.4 Install Core Dependencies
+
+**First attempt — FAILED (disk space):**
+```powershell
+.\venv\Scripts\pip.exe install "flask>=2.3,<4.0" "opencv-python>=4.8,<5.0" "numpy>=1.24,<2.0" "pandas>=2.0,<3.0" "mysql-connector-python>=8.1,<9.0" "bcrypt>=4.0,<5.0" "Pillow>=10.0,<11.0"
+```
+
+**Error received:**
+```
+ERROR: Could not install packages due to an OSError: [Errno 28] No space left on device
+```
+
+**Second attempt — redirected to D: drive — SUCCEEDED:**
+```powershell
+$env:TEMP="D:\pip_tmp"
+$env:TMP="D:\pip_tmp"
+New-Item -ItemType Directory -Force "D:\pip_tmp"
+
+.\venv\Scripts\pip.exe install --cache-dir "D:\pip_cache" `
+    "flask>=2.3,<4.0" `
+    "opencv-python>=4.8,<5.0" `
+    "numpy>=1.24,<2.0" `
+    "pandas>=2.0,<3.0" `
+    "mysql-connector-python>=8.1,<9.0" `
+    "bcrypt>=4.0,<5.0" `
+    "Pillow>=10.0,<11.0"
+```
+
+**Packages successfully installed (with exact versions):**
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| flask | 3.1.3 | Web framework |
+| opencv-python | 4.11.0.86 | Webcam / image processing |
+| numpy | 1.26.4 | Numerical arrays (face encoding math) |
+| pandas | 2.3.3 | Data handling |
+| mysql-connector-python | 8.4.0 | MySQL database driver |
+| bcrypt | 4.3.0 | Password hashing |
+| Pillow (PIL) | 10.4.0 | Image file handling |
+| werkzeug | 3.1.8 | Flask dependency (WSGI) |
+| jinja2 | 3.1.6 | Flask dependency (HTML templates) |
+| click | 8.3.2 | Flask dependency (CLI) |
+| itsdangerous | 2.2.0 | Flask dependency (session signing) |
+| blinker | 1.9.0 | Flask dependency (signals) |
+| colorama | 0.4.6 | Colored terminal output (Windows) |
+| python-dateutil | 2.9.0.post0 | Date parsing (pandas dependency) |
+| pytz | 2026.1.post1 | Timezone support |
+| tzdata | 2026.1 | Timezone database |
+| six | 1.17.0 | Python 2/3 compatibility shim |
+| markupsafe | 3.0.3 | Jinja2 dependency |
+
+---
+
+### 3.5 Install dlib (The Tricky One)
+
+`face_recognition` depends on `dlib`, which **requires C++ compilation on Windows** using CMake and Visual Studio Build Tools. This is the most error-prone step on Windows.
+
+**Attempt — pip tries to build dlib from source — FAILED:**
+```powershell
+$env:TEMP="D:\pip_tmp"; $env:TMP="D:\pip_tmp"
+.\venv\Scripts\pip.exe install --cache-dir "D:\pip_cache" "face-recognition>=1.3,<2.0"
+```
+
+**Error received (after ~5 minutes of downloading and attempting to compile):**
+```
+subprocess.CalledProcessError: Command '['cmake', 'D:\\pip_tmp\\pip-install-...\\dlib_...\\tools\\python',
+'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=...', '-DPYTHON_EXECUTABLE=...', '-A', 'x64']'
+returned non-zero exit status 1.
+
+ERROR: Failed building wheel for dlib
+Failed to build installable wheels for some pyproject.toml based projects: dlib
+```
+
+**Root cause:** CMake and/or Visual Studio C++ Build Tools were not installed or not on the PATH.
+
+---
+
+#### The Fix — Use a pre-built dlib wheel
+
+Instead of compiling dlib from source, download a community-maintained pre-compiled `.whl` binary from GitHub:
+
+> **Repository:** https://github.com/z-mahmud22/Dlib_Windows_Python3.x
+
+**Step 1 — Download the wheel for Python 3.10 win_amd64 to D: drive:**
+```powershell
+Invoke-WebRequest `
+  -Uri "https://github.com/z-mahmud22/Dlib_Windows_Python3.x/raw/refs/heads/main/dlib-19.22.99-cp310-cp310-win_amd64.whl" `
+  -OutFile "D:\dlib-19.22.99-cp310-cp310-win_amd64.whl" `
+  -UseBasicParsing
+```
+
+**Step 2 — Install the downloaded wheel:**
+```powershell
+$env:TEMP="D:\pip_tmp"; $env:TMP="D:\pip_tmp"
+.\venv\Scripts\pip.exe install --cache-dir "D:\pip_cache" "D:\dlib-19.22.99-cp310-cp310-win_amd64.whl"
+```
+
+**Expected output:**
+```
+Processing D:\dlib-19.22.99-cp310-cp310-win_amd64.whl
+Installing collected packages: dlib
+Successfully installed dlib-19.22.99
+```
+
+> [!TIP]
+> **Choosing the right wheel for other Python versions:**
+>
+> Filename format: `dlib-{version}-cp{pyver}-cp{pyver}-win_amd64.whl`
+>
+> | Your Python | Wheel filename |
+> |-------------|----------------|
+> | Python 3.8  | `dlib-19.22.99-cp38-cp38-win_amd64.whl` |
+> | Python 3.9  | `dlib-19.22.99-cp39-cp39-win_amd64.whl` |
+> | Python 3.10 | `dlib-19.22.99-cp310-cp310-win_amd64.whl` |
+> | Python 3.11 | `dlib-19.22.99-cp311-cp311-win_amd64.whl` |
+>
+> Browse all available wheels: https://github.com/z-mahmud22/Dlib_Windows_Python3.x
+
+---
+
+### 3.6 Install face_recognition
+
+With dlib already installed, `face_recognition` installs cleanly:
+
+```powershell
+$env:TEMP="D:\pip_tmp"; $env:TMP="D:\pip_tmp"
+.\venv\Scripts\pip.exe install --cache-dir "D:\pip_cache" "face-recognition>=1.3,<2.0"
+```
+
+**Expected output:**
+```
+Collecting face-recognition-models>=0.3.0
+  Downloading face_recognition_models-0.3.0-py2.py3-none-any.whl (100.1 MB)
+...
+Successfully installed face-recognition-1.3.0 face-recognition-models-0.3.0
+```
+
+> [!NOTE]
+> `face-recognition-models` is ~100 MB — it contains the HOG descriptor model and deep learning landmark detection files. Download time depends on your internet speed.
+
+---
+
+### 3.7 Set Up the MySQL Database
+
+Ensure XAMPP's **MySQL service is running** (check XAMPP Control Panel — MySQL should show "Running"), then:
+
+**Import the schema (run this once):**
+```powershell
+& "C:\xampp\mysql\bin\mysql.exe" -u root -e "SOURCE database/schema.sql;"
+```
+
+**Verify all tables and the default admin user were created:**
+```powershell
+& "C:\xampp\mysql\bin\mysql.exe" -u root -e "USE smart_attendance_db; SHOW TABLES; SELECT username FROM admin_users;"
+```
+
+**Expected output:**
+```
+Tables_in_smart_attendance_db
+admin_users
+attendance
+face_encodings
+users
+
+username
+admin
+```
+
+**What the 4 tables do:**
+
+| Table | Purpose |
+|-------|---------|
+| `users` | Registered students — student_id, full_name, email, course, year_level |
+| `face_encodings` | 128-dimension HOG encoding arrays stored as BLOBs per student |
+| `attendance` | One row per student per calendar day (unique constraint prevents duplicate logins) |
+| `admin_users` | Admin login credentials — username + bcrypt-hashed password |
+
+---
+
+### 3.8 Fix the Admin Password Hash
+
+> [!WARNING]
+> **This step is required on every fresh setup.**
+>
+> The bcrypt hash stored in `schema.sql` was generated on a different machine. Because bcrypt uses random salts, the same password produces a different hash each time. The pre-baked hash in the SQL file will not match `admin123` on a new machine.
+>
+> **Symptom:** Browser shows "Invalid username or password" even though `admin123` is correct.
+
+**Generate a new hash and update the database — use Python (not mysql CLI):**
+```powershell
+.\venv\Scripts\python.exe -c "
+import bcrypt, mysql.connector
+
+# 1. Generate a new bcrypt hash for the password 'admin123'
+h = bcrypt.hashpw(b'admin123', bcrypt.gensalt()).decode()
+print('Generated hash:', h)
+
+# 2. Update the database
+cn = mysql.connector.connect(
+    host='localhost',
+    user='root',
+    password='',
+    database='smart_attendance_db'
+)
+cur = cn.cursor()
+cur.execute('UPDATE admin_users SET password_hash = %s WHERE username = %s', (h, 'admin'))
+cn.commit()
+print('Password updated successfully.')
+cn.close()
+"
+```
+
+**Verify login will work before opening a browser:**
+```powershell
+.\venv\Scripts\python.exe -c "
+import bcrypt, mysql.connector
+cn = mysql.connector.connect(host='localhost', user='root', password='', database='smart_attendance_db')
+cur = cn.cursor(dictionary=True)
+cur.execute('SELECT password_hash FROM admin_users WHERE username = %s', ('admin',))
+row = cur.fetchone()
+ok = bcrypt.checkpw(b'admin123', row['password_hash'].encode('utf-8'))
+print('Login check (admin / admin123):', ok)   # Must print True
+cn.close()
+"
+```
+
+---
+
+### 3.9 Start the Flask Server
+
+```powershell
+.\venv\Scripts\python.exe app.py
+```
+
+**Expected startup output:**
+```
+=======================================================
+  Smart Attendance System - Flask Server
+  URL: http://127.0.0.1:5000
+=======================================================
+ * Serving Flask app 'app'
+ * Debug mode: on
+WARNING: This is a development server. Do not use it in production.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.10.153:5000
+Press CTRL+C to quit
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 854-172-732
+```
+
+> [!TIP]
+> To run the server without blocking your PowerShell terminal:
+> ```powershell
+> Start-Process -NoNewWindow .\venv\Scripts\python.exe -ArgumentList "app.py"
+> ```
+
+---
+
+## 4. Errors Encountered & How They Were Fixed
+
+### Error 1 — `[Errno 28] No space left on device`
+
+| Field | Detail |
+|-------|--------|
+| **When** | First `pip install` attempt |
+| **Cause** | C: drive had only ~62 MB free. pip writes download cache and build temp files to `%TEMP%` which defaults to C: |
+| **Full error** | `ERROR: Could not install packages due to an OSError: [Errno 28] No space left on device` |
+| **Fix** | Redirect TEMP, TMP and pip cache to D: drive before every install |
+
+```powershell
+# Solution — add these lines before any pip install:
+$env:TEMP="D:\pip_tmp"
+$env:TMP="D:\pip_tmp"
+.\venv\Scripts\pip.exe install --cache-dir "D:\pip_cache" <packages>
+```
+
+---
+
+### Error 2 — dlib CMake / C++ Build Failure
+
+| Field | Detail |
+|-------|--------|
+| **When** | `pip install face-recognition` (which auto-pulls dlib) |
+| **Cause** | dlib has no pre-built binary wheel on PyPI for Windows. It must be compiled from C++ source, which requires CMake and Visual Studio Build Tools — neither was installed |
+| **Full error** | `subprocess.CalledProcessError: Command '['cmake', ...]' returned non-zero exit status 1` then `ERROR: Failed building wheel for dlib` |
+| **Fix** | Download a community pre-built `.whl` file from GitHub and install it directly, bypassing compilation entirely |
+
+```powershell
+# Download pre-built dlib (Python 3.10, Windows 64-bit)
+Invoke-WebRequest `
+  -Uri "https://github.com/z-mahmud22/Dlib_Windows_Python3.x/raw/refs/heads/main/dlib-19.22.99-cp310-cp310-win_amd64.whl" `
+  -OutFile "D:\dlib.whl" -UseBasicParsing
+
+# Install the wheel directly
+.\venv\Scripts\pip.exe install "D:\dlib.whl"
+```
+
+---
+
+### Error 3 — Login Fails: "Invalid username or password"
+
+| Field | Detail |
+|-------|--------|
+| **When** | First browser login attempt after database import |
+| **Cause** | bcrypt hashes include a random salt — the hash in `schema.sql` was generated on a different machine and does not match `admin123` when verified on this machine |
+| **Symptom** | Login page shows "Invalid username or password" even though credentials are correct |
+| **Fix** | Re-generate the bcrypt hash using the current Python environment and update the database row directly via Python (see Section 3.8) |
+
+---
+
+### Error 4 — Dollar Signs Mangled by PowerShell
+
+| Field | Detail |
+|-------|--------|
+| **When** | Attempted to update the password hash via `mysql.exe` CLI directly from PowerShell |
+| **Cause** | PowerShell treats `$` as variable interpolation inside double-quoted strings. The bcrypt hash `$2b$12$lVefo...` got corrupted — the `$2b$12$` part was interpreted as variables and stripped out |
+| **Symptom** | Stored hash appeared truncated in the database (e.g., showed `\\/Rwg7gg...` instead of the full hash) |
+| **Fix** | Used Python with `mysql-connector-python` parameterised queries instead of shell string interpolation — the hash is passed as a Python bytes/string object with no shell involvement |
+
+```python
+# WRONG — do not do this in PowerShell, $ gets mangled:
+# mysql.exe ... "UPDATE admin_users SET password_hash = '$2b$12$...' ..."
+
+# CORRECT — parameterised query, no shell interpolation:
+cur.execute('UPDATE admin_users SET password_hash = %s WHERE username = %s', (hash_value, 'admin'))
+```
+
+---
+
+## 5. Accessing the Application
+
+Once the server is running, open any browser and go to:
+
+| URL | Page | Auth Required |
+|-----|------|:---:|
+| `http://127.0.0.1:5000` | Home / Landing page | No |
+| `http://127.0.0.1:5000/login` | Admin login form | No |
+| `http://127.0.0.1:5000/dashboard` | Stats dashboard + face recognition controls | Yes |
+| `http://127.0.0.1:5000/register` | Register new students + capture faces | Yes |
+| `http://127.0.0.1:5000/attendance-log` | View/filter attendance records | Yes |
+
+**Access from another device on the same local network:**
+```
+http://<server-LAN-IP>:5000
+# Example: http://192.168.10.153:5000
+```
+The LAN IP is displayed in the Flask startup output.
+
+---
+
+## 6. Default Credentials
+
+| Field | Value |
+|-------|-------|
+| **Username** | `admin` |
+| **Password** | `admin123` |
+
+> [!CAUTION]
+> Change the default password before sharing or deploying the application on any network.
+>
+> To change the admin password, run:
+> ```python
+> import bcrypt, mysql.connector
+> new_pw = b"YourNewSecurePassword"
+> h = bcrypt.hashpw(new_pw, bcrypt.gensalt()).decode()
+> cn = mysql.connector.connect(host='localhost', user='root', password='', database='smart_attendance_db')
+> cur = cn.cursor()
+> cur.execute('UPDATE admin_users SET password_hash = %s WHERE username = %s', (h, 'admin'))
+> cn.commit()
+> cn.close()
+> ```
+
+---
+
+## 7. Quick Re-setup Checklist
+
+Copy this checklist to use on a new computer:
+
+```
+SMART ATTENDANCE SYSTEM — NEW MACHINE SETUP
+============================================
+
+PREREQUISITES
+  □ Install Python 3.10 (64-bit) — python.org/downloads
+  □ Install XAMPP — apachefriends.org
+  □ Start MySQL from XAMPP Control Panel
+
+PROJECT SETUP
+  □ Copy / clone the project to: C:\xampp\htdocs\smart_attendance\
+  □ Open PowerShell and cd into that directory
+
+VIRTUAL ENVIRONMENT
+  □ python -m venv venv          (only if venv folder doesn't exist)
+
+INSTALL PYTHON DEPENDENCIES
+  □ .\venv\Scripts\pip.exe install -r requirements.txt
+       If C: disk is low, add: --cache-dir "D:\pip_cache"
+       and run: $env:TEMP="D:\pip_tmp"; $env:TMP="D:\pip_tmp"
+
+INSTALL DLIB (if pip install above fails for dlib)
+  □ Download pre-built wheel:
+      Invoke-WebRequest `
+        -Uri "https://github.com/z-mahmud22/Dlib_Windows_Python3.x/raw/refs/heads/main/dlib-19.22.99-cp310-cp310-win_amd64.whl" `
+        -OutFile "D:\dlib.whl" -UseBasicParsing
+  □ .\venv\Scripts\pip.exe install "D:\dlib.whl"
+  □ .\venv\Scripts\pip.exe install "face-recognition>=1.3,<2.0"
+
+DATABASE
+  □ & "C:\xampp\mysql\bin\mysql.exe" -u root -e "SOURCE database/schema.sql;"
+  □ Fix admin password hash (run Python script from Section 3.8)
+  □ Verify: .\venv\Scripts\python.exe -c "..."  (login check prints True)
+
+START & VERIFY
+  □ .\venv\Scripts\python.exe app.py
+  □ Open browser: http://127.0.0.1:5000
+  □ Log in: admin / admin123
+  □ Confirm dashboard, register, and attendance-log pages all load
+```
+
+---
+
+## 8. Restarting the Server Later
+
+After initial setup is complete, starting the server on future uses only needs these two steps:
+
+```powershell
+# Step 1 — Make sure XAMPP MySQL is running (XAMPP Control Panel)
+
+# Step 2 — Start Flask from the project directory
+.\venv\Scripts\python.exe app.py
+```
+
+Then navigate to: **`http://127.0.0.1:5000`**
+
+---
+
+*Documentation generated: 2026-04-16 | Smart Attendance System v1.0*
