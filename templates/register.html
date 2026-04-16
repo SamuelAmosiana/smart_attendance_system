@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register Student — SmartAttend</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body class="admin-page">
+
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <i class="bi bi-camera-video-fill"></i>
+      <span>SmartAttend</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('dashboard') }}"      class="nav-item"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <a href="{{ url_for('register') }}"        class="nav-item active"><i class="bi bi-person-plus-fill"></i> Register</a>
+      <a href="{{ url_for('attendance_log') }}"  class="nav-item"><i class="bi bi-calendar2-check"></i> Attendance Log</a>
+      <a href="#" id="start-recognition-btn"    class="nav-item"><i class="bi bi-camera-fill"></i> Start Recognition</a>
+    </nav>
+    <div class="sidebar-footer">
+      <span><i class="bi bi-person-circle"></i> {{ session.admin_user }}</span>
+      <a href="{{ url_for('logout') }}" class="logout-link"><i class="bi bi-box-arrow-right"></i> Logout</a>
+    </div>
+  </aside>
+
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">
+        <i class="bi bi-list"></i>
+      </button>
+      <div class="topbar-title">
+        <h2>Register Student</h2>
+        <span class="breadcrumb">Add new student &amp; capture face</span>
+      </div>
+    </header>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-wrapper">
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">
+              <i class="bi bi-{{ 'check-circle' if category == 'success' else 'info-circle' }}-fill"></i>
+              {{ message }}
+              <button class="alert-close" onclick="this.parentElement.remove()">×</button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <div class="register-layout">
+      <!-- ── Registration Form ───────────────────────────────── -->
+      <div class="card register-form-card">
+        <div class="card-header">
+          <i class="bi bi-person-plus-fill"></i> Student Details
+        </div>
+        <div class="card-body">
+          <form method="POST" action="{{ url_for('register') }}" id="register-form">
+            <div class="form-group">
+              <label for="student_id">Student ID <span class="required">*</span></label>
+              <input type="text" id="student_id" name="student_id"
+                     class="form-control" placeholder="e.g. 2024/BCS/001" required />
+            </div>
+            <div class="form-group">
+              <label for="full_name">Full Name <span class="required">*</span></label>
+              <input type="text" id="full_name" name="full_name"
+                     class="form-control" placeholder="e.g. John Mwanza" required />
+            </div>
+            <div class="form-group">
+              <label for="email">Email Address</label>
+              <input type="email" id="email" name="email"
+                     class="form-control" placeholder="student@university.ac.zm" />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="course">Course / Programme</label>
+                <input type="text" id="course" name="course"
+                       class="form-control" placeholder="e.g. BSc Computer Science" />
+              </div>
+              <div class="form-group">
+                <label for="year_level">Year of Study</label>
+                <select id="year_level" name="year_level" class="form-control">
+                  <option value="">— Select year —</option>
+                  <option value="1">Year 1</option>
+                  <option value="2">Year 2</option>
+                  <option value="3">Year 3</option>
+                  <option value="4">Year 4</option>
+                </select>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full" id="register-submit-btn">
+              <i class="bi bi-person-check-fill"></i> Register Student
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- ── Face Capture Panel ──────────────────────────────── -->
+      <div class="card face-capture-card">
+        <div class="card-header">
+          <i class="bi bi-camera-fill"></i> Face Capture
+        </div>
+        <div class="card-body">
+          <p class="capture-hint">
+            After registering, enter the Student ID below and click <strong>Capture Faces</strong>
+            to open the webcam and collect face samples.
+          </p>
+
+          <div class="form-group">
+            <label for="capture-student-id">Student ID</label>
+            <input type="text" id="capture-student-id" class="form-control"
+                   placeholder="e.g. 2024/BCS/001" />
+          </div>
+          <div class="form-group">
+            <label for="num-samples">Number of Samples</label>
+            <select id="num-samples" class="form-control">
+              <option value="5">5 samples (quick)</option>
+              <option value="10" selected>10 samples (recommended)</option>
+              <option value="20">20 samples (best accuracy)</option>
+            </select>
+          </div>
+
+          <button class="btn btn-secondary btn-full" id="capture-btn">
+            <i class="bi bi-webcam-fill"></i> Capture Faces
+          </button>
+
+          <div id="capture-status" class="capture-status hidden"></div>
+
+          <!-- ── Encode Faces ──── -->
+          <hr class="divider" />
+          <p class="capture-hint">
+            After capturing photos for all students, click <strong>Encode Faces</strong>
+            to generate recognition models.
+          </p>
+          <button class="btn btn-outline btn-full" id="encode-from-register-btn">
+            <i class="bi bi-cpu-fill"></i> Encode All Faces
+          </button>
+          <div id="encode-status" class="capture-status hidden"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Registered Students Table ──────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <i class="bi bi-people-fill"></i> Registered Students
+        <span class="badge badge-primary">{{ users | length }}</span>
+      </div>
+      <div class="card-body">
+        {% if users %}
+          <div class="table-wrapper">
+            <table class="data-table" id="students-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Student ID</th>
+                  <th>Full Name</th>
+                  <th>Course</th>
+                  <th>Year</th>
+                  <th>Registered</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for i, user in enumerate(users) %}
+                <tr id="row-{{ user.id }}">
+                  <td>{{ i + 1 }}</td>
+                  <td><code>{{ user.student_id }}</code></td>
+                  <td>{{ user.full_name }}</td>
+                  <td>{{ user.course or '—' }}</td>
+                  <td>{{ 'Year ' ~ user.year_level if user.year_level else '—' }}</td>
+                  <td>{{ user.created_at.strftime('%d %b %Y') if user.created_at else '—' }}</td>
+                  <td>
+                    <button class="btn btn-sm btn-danger delete-user-btn"
+                            data-id="{{ user.id }}"
+                            data-name="{{ user.full_name }}">
+                      <i class="bi bi-trash3-fill"></i>
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty-state">
+            <i class="bi bi-person-x"></i>
+            <p>No students registered yet. Use the form above to add the first student.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </main>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/register.js') }}"></script>
+</body>
+</html>

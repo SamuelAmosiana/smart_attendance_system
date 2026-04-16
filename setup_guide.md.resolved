@@ -1,0 +1,266 @@
+# 🎓 Smart Attendance System — Complete Setup Guide
+
+> **Stack:** Python 3.10 · Flask · OpenCV · face_recognition · MySQL · Vanilla JS
+
+---
+
+## 📁 Project Structure
+
+```
+smart_attendance/
+│
+├── app.py                          ← Main Flask application (entry point)
+├── config.py                       ← All configuration (DB, recognition settings)
+├── requirements.txt                ← Python dependencies
+├── .gitignore
+│
+├── database/
+│   └── schema.sql                  ← Run once to create all MySQL tables
+│
+├── models/
+│   └── db.py                       ← MySQL connection helper
+│
+├── face_recognition_module/
+│   ├── capture_faces.py            ← Webcam face capture
+│   ├── encode_faces.py             ← Generate 128-d face embeddings
+│   └── recognize_faces.py          ← Real-time recognition loop
+│
+├── attendance/
+│   └── attendance.py               ← Mark & query attendance records
+│
+├── static/
+│   ├── css/style.css               ← Full design system
+│   └── js/
+│       ├── main.js                 ← Shared utilities
+│       ├── dashboard.js            ← Dashboard logic
+│       ├── register.js             ← Registration page logic
+│       └── attendance_log.js       ← Log page + CSV export
+│
+├── templates/
+│   ├── index.html                  ← Landing page
+│   ├── login.html                  ← Admin login
+│   ├── dashboard.html              ← Admin overview
+│   ├── register.html               ← Student registration
+│   ├── attendance_log.html         ← Attendance log & filter
+│   └── 404.html                    ← Error page
+│
+└── dataset/
+    ├── README.txt
+    └── faces/                      ← Student face images (auto-created)
+```
+
+---
+
+## ⚙️ Phase 1 — Environment Setup
+
+### 1.1 Install Python 3.10
+
+Download from [python.org/downloads](https://www.python.org/downloads/release/python-3100/) (Windows x64 installer).
+
+> [!IMPORTANT]
+> During installation, check **"Add Python to PATH"** before clicking Install.
+
+Verify:
+```powershell
+python --version    # Should show: Python 3.10.x
+```
+
+---
+
+### 1.2 Create a Virtual Environment
+
+Open **PowerShell** in the project folder (`c:\xampp\htdocs\smart_attendance`):
+
+```powershell
+# Navigate to project
+cd c:\xampp\htdocs\smart_attendance
+
+# Create virtual environment
+python -m venv venv
+
+# Activate it
+.\venv\Scripts\Activate.ps1
+```
+
+> [!NOTE]
+> If you see a PowerShell execution policy error, run:
+> `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+
+Your prompt should now show `(venv)` at the start.
+
+---
+
+### 1.3 Install Dependencies
+
+With the venv activated:
+
+```powershell
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+> [!WARNING]
+> **`face_recognition` requires `dlib`**, which needs **CMake** and a C++ compiler.
+> 
+> **Easiest approach for Windows** — install the pre-built wheel:
+> ```powershell
+> pip install cmake
+> pip install dlib
+> pip install face_recognition
+> ```
+> 
+> If `dlib` fails to build, download the precompiled `.whl` for your Python version from:
+> [github.com/z-mahmud22/Dlib_Windows_Python3.x](https://github.com/z-mahmud22/Dlib_Windows_Python3.x)
+> Then: `pip install dlib-19.24.x-cp310-...whl`
+
+---
+
+## 🗄️ Phase 2 — MySQL Setup
+
+### 2.1 Start MySQL (XAMPP)
+
+1. Open **XAMPP Control Panel**
+2. Click **Start** next to **MySQL**
+
+### 2.2 Create the Database
+
+Open **phpMyAdmin** (`http://localhost/phpmyadmin`) or use the MySQL CLI:
+
+```sql
+-- Option A: phpMyAdmin
+-- Click "Import" → choose database/schema.sql → Go
+
+-- Option B: MySQL CLI
+mysql -u root -p < database/schema.sql
+```
+
+### 2.3 Configure Credentials
+
+Edit `config.py`:
+
+```python
+DB_HOST     = "localhost"
+DB_USER     = "root"          # your MySQL username
+DB_PASSWORD = ""              # your MySQL password (blank for XAMPP default)
+DB_NAME     = "smart_attendance_db"
+```
+
+---
+
+## 🔐 Phase 3 — Admin Account
+
+The default admin credentials are:
+
+| Username | Password  |
+|----------|-----------|
+| `admin`  | `admin123` |
+
+> [!CAUTION]
+> Change the default password before deploying! Generate a new bcrypt hash in Python:
+> ```python
+> import bcrypt
+> hash = bcrypt.hashpw(b"your_new_password", bcrypt.gensalt()).decode()
+> print(hash)
+> ```
+> Then update the `admin_users` table in MySQL.
+
+---
+
+## 🚀 Phase 4 — Run the Application
+
+```powershell
+# Make sure venv is active, then:
+python app.py
+```
+
+Open your browser at: **http://127.0.0.1:5000**
+
+---
+
+## 👤 Phase 5 — Register Students & Capture Faces
+
+### Step 1 — Register a student
+1. Go to **Dashboard → Register**
+2. Fill in Student ID, Full Name, Course, Year Level
+3. Click **Register Student**
+
+### Step 2 — Capture face images
+1. On the same Register page, enter the Student ID in the "Face Capture" panel
+2. Choose number of samples (10 recommended)
+3. Click **Capture Faces** — a webcam window opens on the server
+4. Position the student's face in front of the camera
+5. Wait until all samples are captured (window closes automatically)
+
+### Step 3 — Encode faces
+1. Click **Encode All Faces** (or the Encode button on the Dashboard)
+2. This generates 128-dimensional embeddings stored in MySQL + a pickle cache
+
+### Step 4 — Start recognition
+1. Click **Start Recognition** on the Dashboard
+2. A webcam window opens — faces will be detected and labelled
+3. Attendance is automatically logged in the database
+
+---
+
+## 📊 Phase 6 — View Attendance
+
+- **Dashboard** → Today's attendance table + monthly summary
+- **Attendance Log** → Filter by date range and/or student
+- Click **Export CSV** to download records
+
+---
+
+## ⚡ Performance Settings (Low-End CPU)
+
+All tunable in `config.py`:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `FACE_DETECTION_MODEL` | `"hog"` | HOG = CPU-friendly (vs CNN for GPU) |
+| `FRAME_SKIP` | `3` | Process every 3rd frame only |
+| `FRAME_RESIZE_SCALE` | `0.5` | Resize to 50% before processing |
+| `FACE_RECOGNITION_TOLERANCE` | `0.5` | Lower = stricter matching |
+
+---
+
+## 🧪 CLI Usage (Advanced)
+
+You can run each module directly without the web UI:
+
+```powershell
+# Capture 15 face samples for a student
+python face_recognition_module/capture_faces.py --student_id 2024/BCS/001 --count 15
+
+# Encode all faces in dataset/
+python face_recognition_module/encode_faces.py
+
+# Run live recognition (opens webcam window)
+python face_recognition_module/recognize_faces.py
+```
+
+---
+
+## 🐛 Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `ModuleNotFoundError: face_recognition` | Install dlib first (see Phase 1.3) |
+| `Cannot access webcam` | Check `cv2.VideoCapture(0)` — try index `1` or `2` |
+| `DB connection failed` | Check MySQL is running and credentials in `config.py` |
+| Recognition misidentifies | Lower `FACE_RECOGNITION_TOLERANCE` to 0.4 |
+| Very slow recognition | Increase `FRAME_SKIP` to 5 or 6 |
+| Flask port in use | Change port in `app.py`: `app.run(port=5001)` |
+
+---
+
+## 📌 API Endpoints Reference
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| `POST` | `/api/capture-faces` | Start webcam face capture |
+| `POST` | `/api/encode-faces` | Encode all dataset images |
+| `POST` | `/api/start-recognition` | Start live recognition loop |
+| `POST` | `/api/recognize-frame` | Send single frame for recognition |
+| `GET`  | `/api/attendance/today` | Today's attendance JSON |
+| `GET`  | `/api/users` | All active users JSON |
+| `DELETE` | `/api/users/<id>` | Soft-delete a user |

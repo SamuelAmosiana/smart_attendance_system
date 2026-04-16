@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Attendance System</title>
+  <meta name="description" content="AI-powered face recognition attendance system for universities." />
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body class="landing-page">
+
+  <!-- ── NAV ──────────────────────────────────────────────── -->
+  <nav class="navbar">
+    <div class="nav-brand">
+      <i class="bi bi-camera-video-fill nav-icon"></i>
+      <span>SmartAttend</span>
+    </div>
+    <a href="{{ url_for('login') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-lock-fill"></i> Admin Login
+    </a>
+  </nav>
+
+  <!-- ── HERO ─────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-glow"></div>
+    <div class="hero-content">
+      <div class="hero-badge">
+        <i class="bi bi-cpu-fill"></i> AI-Powered · HOG Face Recognition
+      </div>
+      <h1>Smart Attendance<br /><span class="gradient-text">Using Face Recognition</span></h1>
+      <p class="hero-subtitle">
+        Automate student attendance with real-time face recognition.
+        No GPU required — optimised for everyday hardware.
+      </p>
+      <div class="hero-actions">
+        <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg">
+          <i class="bi bi-speedometer2"></i> Go to Dashboard
+        </a>
+        <a href="#features" class="btn btn-outline btn-lg">
+          <i class="bi bi-info-circle"></i> Learn More
+        </a>
+      </div>
+    </div>
+    <!-- Floating stat cards -->
+    <div class="hero-stats">
+      <div class="stat-card">
+        <i class="bi bi-people-fill"></i>
+        <p class="stat-num">∞</p>
+        <p class="stat-label">Students</p>
+      </div>
+      <div class="stat-card">
+        <i class="bi bi-lightning-charge-fill"></i>
+        <p class="stat-num">&lt;1s</p>
+        <p class="stat-label">Recognition Time</p>
+      </div>
+      <div class="stat-card">
+        <i class="bi bi-shield-check-fill"></i>
+        <p class="stat-num">HOG</p>
+        <p class="stat-label">CPU Model</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FEATURES ──────────────────────────────────────────── -->
+  <section class="features" id="features">
+    <div class="section-header">
+      <h2>System Features</h2>
+      <p>Everything you need for a robust attendance management system.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon" style="--icon-color: #6C63FF;">
+          <i class="bi bi-person-video3"></i>
+        </div>
+        <h3>Face Registration</h3>
+        <p>Capture multiple face samples per student via webcam and store encodings securely in MySQL.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="--icon-color: #00C896;">
+          <i class="bi bi-eye-fill"></i>
+        </div>
+        <h3>Real-Time Recognition</h3>
+        <p>Detect and recognise multiple faces simultaneously with bounding-box overlays and name labels.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="--icon-color: #FF6B6B;">
+          <i class="bi bi-calendar2-check-fill"></i>
+        </div>
+        <h3>Auto Attendance</h3>
+        <p>Attendance is logged automatically with date & time. Duplicate check-ins are automatically prevented.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="--icon-color: #FFB347;">
+          <i class="bi bi-bar-chart-fill"></i>
+        </div>
+        <h3>Admin Dashboard</h3>
+        <p>View live summaries, filter by date range, and manage all registered students from one place.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="--icon-color: #4FC3F7;">
+          <i class="bi bi-cpu"></i>
+        </div>
+        <h3>Low-End Optimised</h3>
+        <p>HOG detection model, frame skipping, and resize scaling ensure smooth performance on Celeron CPUs.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="--icon-color: #CE93D8;">
+          <i class="bi bi-database-fill-check"></i>
+        </div>
+        <h3>MySQL Storage</h3>
+        <p>All user data, face encodings, and attendance records stored reliably in a normalised MySQL database.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TECH STACK ─────────────────────────────────────────── -->
+  <section class="tech-stack">
+    <div class="section-header">
+      <h2>Technology Stack</h2>
+    </div>
+    <div class="tech-grid">
+      <div class="tech-badge"><i class="bi bi-filetype-py"></i> Python 3.10</div>
+      <div class="tech-badge"><i class="bi bi-server"></i> Flask</div>
+      <div class="tech-badge"><i class="bi bi-camera-fill"></i> OpenCV</div>
+      <div class="tech-badge"><i class="bi bi-person-bounding-box"></i> face_recognition</div>
+      <div class="tech-badge"><i class="bi bi-database-fill"></i> MySQL</div>
+      <div class="tech-badge"><i class="bi bi-code-slash"></i> Vanilla JS</div>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ─────────────────────────────────────────────── -->
+  <footer class="footer">
+    <p>
+      <i class="bi bi-camera-video-fill"></i>
+      SmartAttend &mdash; University Final Year Project &bull; Built with Python, Flask &amp; face_recognition
+    </p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
