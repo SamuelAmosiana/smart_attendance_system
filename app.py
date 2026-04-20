@@ -417,9 +417,11 @@ def too_large(e):
 
 # ── Run ────────────────────────────────────────────────────
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
     print("=" * 55)
     print("  Smart Attendance System — Flask Server")
-    print("  URL: http://127.0.0.1:5000")
+    print(f"  URL: http://0.0.0.0:{port}")
     print("=" * 55)
-    # debug=False for production; use debug=True during development
-    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)
+    # debug=False for production (Render sets DEBUG env if needed)
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host="0.0.0.0", port=port, debug=debug_mode, threaded=True)
