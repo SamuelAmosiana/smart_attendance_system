@@ -5,6 +5,7 @@
 # can obtain a fresh MySQL connection using the shared config.
 # ============================================================
 
+import os
 import mysql.connector
 from mysql.connector import Error
 from config import Config
@@ -13,18 +14,28 @@ from config import Config
 def get_connection():
     """
     Opens and returns a MySQL connection using credentials
-    defined in config.py.
+    defined in config.py / environment variables.
+
+    Supports optional SSL (required by Aiven and other managed hosts).
+    Set the DB_SSL_CA environment variable to the path of the CA
+    certificate to enable verified TLS.  Leave it unset for plain
+    connections (local XAMPP development).
 
     Returns:
         mysql.connector.connection.MySQLConnection | None
     """
     try:
+        # Build optional SSL kwargs
+        ssl_ca = os.environ.get("DB_SSL_CA", "").strip()
+        ssl_kwargs = {"ssl_ca": ssl_ca, "ssl_verify_cert": True} if ssl_ca else {}
+
         connection = mysql.connector.connect(
             host     = Config.DB_HOST,
             port     = Config.DB_PORT,
             user     = Config.DB_USER,
             password = Config.DB_PASSWORD,
-            database = Config.DB_NAME
+            database = Config.DB_NAME,
+            **ssl_kwargs
         )
         return connection
     except Error as e:
