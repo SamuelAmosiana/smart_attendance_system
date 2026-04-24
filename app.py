@@ -8,9 +8,6 @@
 import os
 import pickle
 import threading
-import cv2
-import face_recognition
-import numpy as np
 import bcrypt
 
 from datetime import date, datetime
@@ -23,10 +20,23 @@ from functools import wraps
 from config import Config
 from models.db import execute_query
 from attendance.attendance import mark_attendance, get_attendance, get_summary
-from face_recognition_module.capture_faces import capture_faces
-from face_recognition_module.encode_faces import (
-    encode_all_faces, save_encodings_to_pickle, save_encodings_to_db
-)
+
+# ── Optional heavy imports (face recognition) ──────────────
+# These are guarded so the app can still start and serve the
+# landing page / login even if dlib or OpenCV is unavailable.
+try:
+    import cv2
+    import numpy as np
+    import face_recognition
+    from face_recognition_module.capture_faces import capture_faces
+    from face_recognition_module.encode_faces import (
+        encode_all_faces, save_encodings_to_pickle, save_encodings_to_db
+    )
+    FACE_RECOGNITION_AVAILABLE = True
+except Exception as _fr_err:  # noqa: BLE001
+    print(f"[WARN] face_recognition not available: {_fr_err}")
+    print("[WARN] Face-related API endpoints will return 503 until the package is installed.")
+    FACE_RECOGNITION_AVAILABLE = False
 
 # ── App Initialisation ─────────────────────────────────────
 app = Flask(__name__)
@@ -46,22 +56,28 @@ def reload_encodings():
     """
     Reloads face encodings from the pickle file into memory.
     Thread-safe — uses a lock so live recognition isn't disrupted.
+    No-ops safely if face_recognition is unavailable.
     """
+    if not FACE_RECOGNITION_AVAILABLE:
+        return
     global _known_encodings, _known_ids
     if not os.path.exists(Config.ENCODINGS_FILE):
         return
-    with open(Config.ENCODINGS_FILE, "rb") as f:
-        data = pickle.load(f)
-    with _encodings_lock:
-        _known_encodings = []
-        _known_ids       = []
-        for student_id, enc_list in data.items():
-            for enc in enc_list:
-                _known_encodings.append(enc)
-                _known_ids.append(student_id)
+    try:
+        with open(Config.ENCODINGS_FILE, "rb") as f:
+            data = pickle.load(f)
+        with _encodings_lock:
+            _known_encodings = []
+            _known_ids       = []
+            for student_id, enc_list in data.items():
+                for enc in enc_list:
+                    _known_encodings.append(enc)
+                    _known_ids.append(student_id)
+    except Exception as e:
+        print(f"[WARN] Could not load encodings: {e}")
 
 
-reload_encodings()   # Load on startup
+reload_encodings()   # Load on startup (safe no-op if unavailable)
 
 # Make Python's built-in enumerate available in all Jinja2 templates
 app.jinja_env.globals.update(enumerate=enumerate)
@@ -229,6 +245,10 @@ def api_capture_faces():
     Starts face capture in a background thread (non-blocking).
     The webcam window opens on the server machine.
     """
+    if not FACE_RECOGNITION_AVAILABLE:
+        return jsonify({"success": False,
+                        "message": "Face recognition is not available on this server."}), 503
+
     data       = request.json or {}
     student_id = data.get("student_id", "").strip()
     num_samples = int(data.get("num_samples", 10))
@@ -256,6 +276,10 @@ def api_encode_faces():
     POST /api/encode-faces
     Encodes all face images in dataset/faces/ and reloads into memory.
     """
+    if not FACE_RECOGNITION_AVAILABLE:
+        return jsonify({"success": False,
+                        "message": "Face recognition is not available on this server."}), 503
+
     encodings = encode_all_faces()
     if not encodings:
         return jsonify({"success": False, "message": "No images found to encode."}), 400
@@ -280,6 +304,10 @@ def api_start_recognition():
     Starts the live recognition loop in a background thread.
     The webcam window opens on the server machine.
     """
+    if not FACE_RECOGNITION_AVAILABLE:
+        return jsonify({"success": False,
+                        "message": "Face recognition is not available on this server."}), 503
+
     from face_recognition_module.recognize_faces import recognize_faces_live
 
     def _run():
@@ -300,6 +328,10 @@ def api_recognize_frame():
     Body (form-data):
         frame : binary JPEG/PNG image file
     """
+    if not FACE_RECOGNITION_AVAILABLE:
+        return jsonify({"success": False,
+                        "message": "Face recognition is not available on this server."}), 503
+
     if "frame" not in request.files:
         return jsonify({"success": False, "message": "No frame provided."}), 400
 
