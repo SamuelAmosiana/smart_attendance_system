@@ -24,6 +24,9 @@ instance/
 dataset/encodings.pkl
 dataset/faces/
 
+# Local database dumps — not needed on Render
+database/*.sql
+
 # IDE
 .vscode/
 .idea/
