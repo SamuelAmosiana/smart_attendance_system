@@ -230,41 +230,58 @@ def setup_admin():
 
 @app.route("/db-check")
 def db_check():
-    """Diagnostic route — shows DB connectivity and table status."""
-    from models.db import get_connection
+    """Diagnostic route — shows DB connectivity, table status, and bcrypt test."""
     lines = ["<h2>🔍 DB Diagnostics</h2><pre>"]
     try:
         conn = get_connection()
         if not conn:
-            lines.append("❌ Could not connect to database.\n")
+            lines.append("❌ STEP 1: Could not connect to database.\n")
+            lines.append(f"    DATABASE_URL starts with: {Config.DATABASE_URL[:30]}...\n")
         else:
-            lines.append("✅ Database connection OK\n\n")
+            lines.append("✅ STEP 1: Database connection OK\n\n")
             cur = conn.cursor()
 
-            # Check which tables exist
+            # Step 2 — which tables exist
             cur.execute("""
                 SELECT table_name FROM information_schema.tables
-                WHERE table_schema = 'public'
-                ORDER BY table_name
+                WHERE table_schema = 'public' ORDER BY table_name
             """)
             tables = [r[0] for r in cur.fetchall()]
-            lines.append(f"Tables found: {tables}\n\n")
+            lines.append(f"✅ STEP 2: Tables found: {tables}\n\n")
 
-            # Show admin_users rows (mask password)
+            # Step 3 — admin_users content
             if "admin_users" in tables:
-                cur.execute("SELECT id, username, LEFT(password_hash,20) AS hash_prefix, created_at FROM admin_users")
+                cur.execute("SELECT id, username, password_hash, created_at FROM admin_users")
                 admins = cur.fetchall()
-                lines.append(f"admin_users rows: {admins}\n")
+                if admins:
+                    for row in admins:
+                        uid, uname, uhash, ucreated = row
+                        lines.append(f"   Row: id={uid}  username={uname}  hash={uhash[:25]}...  created={ucreated}\n")
+
+                    # Step 4 — live bcrypt check
+                    stored_hash = admins[0][2]  # password_hash column
+                    test_pass   = "admin123"
+                    try:
+                        ok = bcrypt.checkpw(test_pass.encode("utf-8"), stored_hash.encode("utf-8"))
+                        icon = "✅" if ok else "❌"
+                        lines.append(f"\n{icon} STEP 4: bcrypt.checkpw('admin123', stored_hash) = {ok}\n")
+                        if not ok:
+                            lines.append("   → Hash in DB does NOT match 'admin123'. Run /setup-admin to fix.\n")
+                    except Exception as be:
+                        lines.append(f"❌ STEP 4: bcrypt check error: {be}\n")
+                else:
+                    lines.append("⚠️  STEP 3: admin_users table exists but has NO rows! Run /setup-admin.\n")
             else:
-                lines.append("⚠️  admin_users table does NOT exist!\n")
+                lines.append("❌ STEP 3: admin_users table does NOT exist! Run /setup-admin.\n")
 
             cur.close()
             conn.close()
     except Exception as e:
-        lines.append(f"❌ Error: {e}\n")
+        lines.append(f"❌ Exception: {e}\n")
+
     lines.append("</pre>")
-    lines.append("<p><a href='/setup-admin'>Run Setup Admin &rarr;</a></p>")
-    lines.append("<p><a href='/login'>Go to Login &rarr;</a></p>")
+    lines.append("<p><a href='/setup-admin'>▶ Run /setup-admin</a></p>")
+    lines.append("<p><a href='/login'>▶ Go to Login</a></p>")
     return "".join(lines)
 
 
