@@ -49,29 +49,97 @@ os.makedirs(os.path.dirname(Config.ENCODINGS_FILE), exist_ok=True)
 
 def init_db():
     """
-    Runs database/schema.sql against the connected PostgreSQL DB.
-    Called once on startup — CREATE TABLE IF NOT EXISTS is idempotent.
+    Creates all tables and seeds the default admin account.
+    - Executes each statement individually (psycopg2 requirement).
+    - Retries up to 5 times (Render DB may not be ready at cold-start).
+    - Admin upsert uses ON CONFLICT DO UPDATE so it fixes wrong hashes too.
     """
-    schema_path = os.path.join(os.path.dirname(__file__), "database", "schema.sql")
-    if not os.path.exists(schema_path):
-        print("[WARN] schema.sql not found — skipping DB init.")
-        return
-    try:
-        conn = get_connection()
-        if not conn:
-            print("[WARN] Could not connect to DB — skipping schema init.")
+    import time
+
+    STATEMENTS = [
+        # ── users ────────────────────────────────────────────
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id          SERIAL          PRIMARY KEY,
+            student_id  VARCHAR(20)     NOT NULL UNIQUE,
+            full_name   VARCHAR(100)    NOT NULL,
+            email       VARCHAR(150)        NULL UNIQUE,
+            course      VARCHAR(100)        NULL,
+            year_level  SMALLINT            NULL,
+            photo_path  VARCHAR(255)        NULL,
+            created_at  TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at  TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            is_active   SMALLINT        NOT NULL DEFAULT 1
+        )
+        """,
+        # ── face_encodings ───────────────────────────────────
+        """
+        CREATE TABLE IF NOT EXISTS face_encodings (
+            id          SERIAL      PRIMARY KEY,
+            user_id     INTEGER     NOT NULL REFERENCES users(id)
+                                    ON DELETE CASCADE ON UPDATE CASCADE,
+            encoding    BYTEA       NOT NULL,
+            captured_at TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_encoding_user ON face_encodings (user_id)",
+        # ── attendance ───────────────────────────────────────
+        """
+        CREATE TABLE IF NOT EXISTS attendance (
+            id          SERIAL      PRIMARY KEY,
+            user_id     INTEGER     NOT NULL REFERENCES users(id)
+                                    ON DELETE CASCADE ON UPDATE CASCADE,
+            date        DATE        NOT NULL,
+            time_in     TIME        NOT NULL,
+            status      VARCHAR(10) NOT NULL DEFAULT 'present'
+                                    CHECK (status IN ('present','late','absent')),
+            created_at  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT uq_attendance_user_date UNIQUE (user_id, date)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance (date)",
+        "CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance (user_id)",
+        # ── admin_users ──────────────────────────────────────
+        """
+        CREATE TABLE IF NOT EXISTS admin_users (
+            id            SERIAL        PRIMARY KEY,
+            username      VARCHAR(50)   NOT NULL UNIQUE,
+            password_hash VARCHAR(255)  NOT NULL,
+            created_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        # Always upsert admin so a wrong/missing hash is always fixed
+        """
+        INSERT INTO admin_users (username, password_hash)
+        VALUES ('admin', '$2b$12$5x8Fi4Bh0JeAbEbYgwITY.ZOaYpjdFpNBatr/DFWxfZEyEgEKZva6')
+        ON CONFLICT (username) DO UPDATE
+            SET password_hash = EXCLUDED.password_hash
+        """,
+    ]
+
+    for attempt in range(1, 6):
+        try:
+            conn = get_connection()
+            if not conn:
+                raise RuntimeError("get_connection() returned None")
+
+            with conn.cursor() as cur:
+                for stmt in STATEMENTS:
+                    cur.execute(stmt)
+            conn.commit()
+            conn.close()
+            print("[INFO] ✅ Database schema initialised and admin seeded successfully.")
             return
-        with conn.cursor() as cur:
-            with open(schema_path, "r") as f:
-                cur.execute(f.read())
-        conn.commit()
-        conn.close()
-        print("[INFO] Database schema initialised successfully.")
-    except Exception as e:
-        print(f"[WARN] DB init error (may be safe to ignore on re-deploys): {e}")
+        except Exception as e:
+            print(f"[WARN] DB init attempt {attempt}/5 failed: {e}")
+            if attempt < 5:
+                time.sleep(3)
+
+    print("[ERROR] ❌ Could not initialise the database after 5 attempts.")
 
 
-init_db()   # Auto-run schema on every startup (idempotent)
+init_db()   # Auto-run on every startup (all statements are idempotent)
+
 
 # ── In-memory cache for fast recognition ──────────────────
 _known_encodings = []
@@ -141,7 +209,7 @@ def setup_admin():
     Remove this route after you have successfully logged in.
     """
     verified_hash = "$2b$12$5x8Fi4Bh0JeAbEbYgwITY.ZOaYpjdFpNBatr/DFWxfZEyEgEKZva6"
-    execute_query(
+    result = execute_query(
         """
         INSERT INTO admin_users (username, password_hash)
         VALUES (%s, %s)
@@ -150,12 +218,54 @@ def setup_admin():
         """,
         ("admin", verified_hash)
     )
+    status = "✅ Success" if result is not None else "❌ Failed — check DB connection"
     return (
-        "<h2>✅ Admin account reset.</h2>"
+        f"<h2>{status}</h2>"
         "<p>Username: <strong>admin</strong> &nbsp;|&nbsp; "
         "Password: <strong>admin123</strong></p>"
         "<p><a href='/login'>Go to Login &rarr;</a></p>"
+        "<p><a href='/db-check'>Check DB Status &rarr;</a></p>"
     )
+
+
+@app.route("/db-check")
+def db_check():
+    """Diagnostic route — shows DB connectivity and table status."""
+    from models.db import get_connection
+    lines = ["<h2>🔍 DB Diagnostics</h2><pre>"]
+    try:
+        conn = get_connection()
+        if not conn:
+            lines.append("❌ Could not connect to database.\n")
+        else:
+            lines.append("✅ Database connection OK\n\n")
+            cur = conn.cursor()
+
+            # Check which tables exist
+            cur.execute("""
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = 'public'
+                ORDER BY table_name
+            """)
+            tables = [r[0] for r in cur.fetchall()]
+            lines.append(f"Tables found: {tables}\n\n")
+
+            # Show admin_users rows (mask password)
+            if "admin_users" in tables:
+                cur.execute("SELECT id, username, LEFT(password_hash,20) AS hash_prefix, created_at FROM admin_users")
+                admins = cur.fetchall()
+                lines.append(f"admin_users rows: {admins}\n")
+            else:
+                lines.append("⚠️  admin_users table does NOT exist!\n")
+
+            cur.close()
+            conn.close()
+    except Exception as e:
+        lines.append(f"❌ Error: {e}\n")
+    lines.append("</pre>")
+    lines.append("<p><a href='/setup-admin'>Run Setup Admin &rarr;</a></p>")
+    lines.append("<p><a href='/login'>Go to Login &rarr;</a></p>")
+    return "".join(lines)
 
 
 @app.route("/login", methods=["GET", "POST"])
