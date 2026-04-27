@@ -1,45 +1,26 @@
 # ============================================================
-# models/db.py — Database Connection Helper
-# ============================================================
-# Provides a simple get_connection() helper so every module
-# can obtain a fresh MySQL connection using the shared config.
+# models/db.py — Database Connection Helper (PostgreSQL)
 # ============================================================
 
 import os
-import mysql.connector
-from mysql.connector import Error
+import psycopg2
+import psycopg2.extras
 from config import Config
 
 
 def get_connection():
     """
-    Opens and returns a MySQL connection using credentials
-    defined in config.py / environment variables.
-
-    Supports optional SSL (required by Aiven and other managed hosts).
-    Set the DB_SSL_CA environment variable to the path of the CA
-    certificate to enable verified TLS.  Leave it unset for plain
-    connections (local XAMPP development).
+    Opens and returns a PostgreSQL connection using the
+    DATABASE_URL from config.py (injected by Render Blueprint).
 
     Returns:
-        mysql.connector.connection.MySQLConnection | None
+        psycopg2 connection | None
     """
     try:
-        # Build optional SSL kwargs
-        ssl_ca = os.environ.get("DB_SSL_CA", "").strip()
-        ssl_kwargs = {"ssl_ca": ssl_ca, "ssl_verify_cert": True} if ssl_ca else {}
-
-        connection = mysql.connector.connect(
-            host     = Config.DB_HOST,
-            port     = Config.DB_PORT,
-            user     = Config.DB_USER,
-            password = Config.DB_PASSWORD,
-            database = Config.DB_NAME,
-            **ssl_kwargs
-        )
+        connection = psycopg2.connect(Config.DATABASE_URL, sslmode="require")
         return connection
-    except Error as e:
-        print(f"[DB ERROR] Could not connect to MySQL: {e}")
+    except Exception as e:
+        print(f"[DB ERROR] Could not connect to PostgreSQL: {e}")
         return None
 
 
@@ -50,27 +31,28 @@ def execute_query(query: str, params: tuple = (), fetch: bool = False):
     Args:
         query  : SQL string with %s placeholders.
         params : Tuple of values for placeholders.
-        fetch  : If True, returns all fetched rows.
+        fetch  : If True, returns all fetched rows as list of dicts.
 
     Returns:
-        list[dict] | True | None
+        list[dict] | int | None
     """
     connection = get_connection()
     if not connection:
         return None
 
     try:
-        cursor = connection.cursor(dictionary=True)
+        # RealDictCursor returns rows as dicts (same behaviour as mysql-connector)
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cursor.execute(query, params)
 
         if fetch:
-            result = cursor.fetchall()
+            result = [dict(row) for row in cursor.fetchall()]
             return result
 
         connection.commit()
-        return cursor.lastrowid   # useful for INSERT operations
+        return cursor.lastrowid if hasattr(cursor, "lastrowid") else True
 
-    except Error as e:
+    except Exception as e:
         print(f"[DB ERROR] Query failed: {e}")
         connection.rollback()
         return None

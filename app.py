@@ -18,7 +18,7 @@ from flask import (
 from functools import wraps
 
 from config import Config
-from models.db import execute_query
+from models.db import execute_query, get_connection
 from attendance.attendance import mark_attendance, get_attendance, get_summary
 
 # ── Optional heavy imports (face recognition) ──────────────
@@ -45,6 +45,33 @@ app.config["MAX_CONTENT_LENGTH"] = Config.MAX_CONTENT_LENGTH
 
 os.makedirs(Config.DATASET_DIR,              exist_ok=True)
 os.makedirs(os.path.dirname(Config.ENCODINGS_FILE), exist_ok=True)
+
+
+def init_db():
+    """
+    Runs database/schema.sql against the connected PostgreSQL DB.
+    Called once on startup — CREATE TABLE IF NOT EXISTS is idempotent.
+    """
+    schema_path = os.path.join(os.path.dirname(__file__), "database", "schema.sql")
+    if not os.path.exists(schema_path):
+        print("[WARN] schema.sql not found — skipping DB init.")
+        return
+    try:
+        conn = get_connection()
+        if not conn:
+            print("[WARN] Could not connect to DB — skipping schema init.")
+            return
+        with conn.cursor() as cur:
+            with open(schema_path, "r") as f:
+                cur.execute(f.read())
+        conn.commit()
+        conn.close()
+        print("[INFO] Database schema initialised successfully.")
+    except Exception as e:
+        print(f"[WARN] DB init error (may be safe to ignore on re-deploys): {e}")
+
+
+init_db()   # Auto-run schema on every startup (idempotent)
 
 # ── In-memory cache for fast recognition ──────────────────
 _known_encodings = []
