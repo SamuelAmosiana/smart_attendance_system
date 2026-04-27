@@ -132,6 +132,32 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/setup-admin")
+def setup_admin():
+    """
+    One-time route: upserts the default admin account with a verified
+    bcrypt hash for 'admin123'.  Call this ONCE after deploy to fix
+    the admin login, then it becomes a no-op on subsequent calls.
+    Remove this route after you have successfully logged in.
+    """
+    verified_hash = "$2b$12$5x8Fi4Bh0JeAbEbYgwITY.ZOaYpjdFpNBatr/DFWxfZEyEgEKZva6"
+    execute_query(
+        """
+        INSERT INTO admin_users (username, password_hash)
+        VALUES (%s, %s)
+        ON CONFLICT (username) DO UPDATE
+            SET password_hash = EXCLUDED.password_hash
+        """,
+        ("admin", verified_hash)
+    )
+    return (
+        "<h2>✅ Admin account reset.</h2>"
+        "<p>Username: <strong>admin</strong> &nbsp;|&nbsp; "
+        "Password: <strong>admin123</strong></p>"
+        "<p><a href='/login'>Go to Login &rarr;</a></p>"
+    )
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     """Admin login handler."""

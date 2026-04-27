@@ -65,9 +65,11 @@ CREATE TABLE IF NOT EXISTS admin_users (
 );
 
 -- Insert default admin (password: admin123)
+-- Hash generated with: bcrypt.hashpw(b"admin123", bcrypt.gensalt(12))
 INSERT INTO admin_users (username, password_hash)
 VALUES (
     'admin',
-    '$2b$12$KIXbR7hM3z6bK3n5b7x5VObmQVXwH.5UMkOZqsPO.JH3oCj8S5n.2'
+    '$2b$12$5x8Fi4Bh0JeAbEbYgwITY.ZOaYpjdFpNBatr/DFWxfZEyEgEKZva6'
 )
-ON CONFLICT (username) DO NOTHING;
+ON CONFLICT (username) DO UPDATE
+    SET password_hash = EXCLUDED.password_hash;
