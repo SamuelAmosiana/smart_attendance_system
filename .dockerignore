@@ -1,0 +1,48 @@
+# ============================================================
+# .dockerignore — Smart Attendance System
+# ============================================================
+# Files/directories to exclude from the Docker build context.
+# Keeping the build context small speeds up deploys.
+# ============================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Dataset & face encodings (large binary data — not part of source)
+dataset/faces/
+dataset/*.pkl
+
+# Local dev / editor files
+.env
+.env.*
+*.local
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Render / CI artifacts
+*.resolved
+*.log
