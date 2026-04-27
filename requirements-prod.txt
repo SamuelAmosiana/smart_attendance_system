@@ -1,0 +1,20 @@
+# ============================================================
+# requirements-prod.txt — Production dependencies only
+# ============================================================
+# Face recognition packages (dlib, face_recognition, opencv)
+# are intentionally EXCLUDED here. They require a webcam and
+# 8GB+ RAM to build — neither is available on Render free tier.
+#
+# The app handles their absence gracefully via the try/except
+# in app.py (FACE_RECOGNITION_AVAILABLE = False).
+# All other features (dashboard, attendance, student mgmt) work
+# fully without these packages.
+#
+# For local dev with face recognition:  pip install -r requirements.txt
+# ============================================================
+
+flask>=2.3,<4.0
+psycopg2-binary>=2.9,<3.0
+bcrypt>=4.0,<5.0
+Pillow>=10.0,<11.0
+gunicorn>=21.0,<23.0

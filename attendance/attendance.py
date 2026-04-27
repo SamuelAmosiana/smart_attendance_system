@@ -142,10 +142,10 @@ def get_summary(month: int = None, year: int = None) -> list:
         FROM users u
         LEFT JOIN attendance a
             ON a.user_id = u.id
-            AND MONTH(a.date) = %s
-            AND YEAR(a.date)  = %s
+            AND EXTRACT(MONTH FROM a.date) = %s
+            AND EXTRACT(YEAR  FROM a.date) = %s
         WHERE u.is_active = 1
-        GROUP BY u.id
+        GROUP BY u.id, u.student_id, u.full_name, u.course
         ORDER BY u.full_name ASC
     """
     rows = execute_query(query, (month, year), fetch=True)
